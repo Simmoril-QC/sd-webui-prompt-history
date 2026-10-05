@@ -122,18 +122,18 @@ function promptHistoryAutoRefresh() {
         btnSave.classList.add("lg", "secondary", "gradio-button", btn_c.classList[btn_c.classList.length-1])
         btnSave.innerHTML = "Save Last Generated Info"
         pdiv.insertBefore(btnSave, pinit);
-        
+
         // watch btn
         const saveBtn = gradioApp().querySelector('#prompt_history_save_btn');
-        let hideStateWatcher = new ClassWatcher(saveBtn, 'hide', 
+        let hideStateWatcher = new ClassWatcher(saveBtn, 'hide',
         ()=> {
             btnSave.classList.add("hide")
-        }, 
+        },
         ()=>{
             btnSave.classList.remove("hide")
         });
     }
-    
+
     const ll = setInterval(() => {
         const generating = gradioApp().querySelector('#tab_extension_prompt_history_tab .generating');
         if (generating !== undefined && generating !== null) {
@@ -144,7 +144,54 @@ function promptHistoryAutoRefresh() {
     }, 1000);
 }
 
+// ---- hover tooltip: show the full prompt when the mouse hovers a table row ----
+let pmtTooltip = null;
+function promptHistoryTooltip() {
+    if (!pmtTooltip) {
+        pmtTooltip = document.createElement("div");
+        pmtTooltip.id = "pmt-tooltip";
+        pmtTooltip.style.display = "none";
+        document.body.appendChild(pmtTooltip);
+    }
+    if (pmtTooltip.__installed) return;
+    pmtTooltip.__installed = true;
+
+    function moveTooltip(e) {
+        const pad = 14;
+        const rect = pmtTooltip.getBoundingClientRect();
+        let x = e.clientX + pad;
+        let y = e.clientY + pad;
+        if (x + rect.width > window.innerWidth) x = e.clientX - rect.width - pad;
+        if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - pad;
+        pmtTooltip.style.left = x + "px";
+        pmtTooltip.style.top = y + "px";
+    }
+
+    document.addEventListener("mouseover", (e) => {
+        const cell = e.target.closest && e.target.closest("#prompt-history-table .pmt-prompt-cell");
+        if (!cell) return;
+        const text = (cell.textContent || "").trim();
+        if (!text) return;
+        pmtTooltip.textContent = text;
+        pmtTooltip.style.display = "block";
+        moveTooltip(e);
+    });
+    document.addEventListener("mousemove", (e) => {
+        if (pmtTooltip.style.display === "none") return;
+        const cell = e.target.closest && e.target.closest("#prompt-history-table .pmt-prompt-cell");
+        if (!cell) { pmtTooltip.style.display = "none"; return; }
+        moveTooltip(e);
+    });
+    document.addEventListener("mouseout", (e) => {
+        const cell = e.target.closest && e.target.closest("#prompt-history-table .pmt-prompt-cell");
+        if (!cell) return;
+        const to = e.relatedTarget && e.relatedTarget.closest
+            ? e.relatedTarget.closest("#prompt-history-table .pmt-prompt-cell") : null;
+        if (to !== cell) pmtTooltip.style.display = "none";
+    });
+}
+
 onUiLoaded(async() => {
     promptHistoryAutoRefresh()
+    promptHistoryTooltip()
 });
-

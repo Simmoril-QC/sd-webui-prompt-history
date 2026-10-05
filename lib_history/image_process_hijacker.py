@@ -13,7 +13,7 @@ def process_images(p: processing.StableDiffusionProcessing, original_function):
     # if prompt history is not enable then call original function
     if not global_state.is_enabled:
         return original_function(p)
-    
+
     # mark old state of return_grid
     # we set it to True to make sure it return grid image in case of multi images
     old_state = shared.opts.return_grid
@@ -21,7 +21,13 @@ def process_images(p: processing.StableDiffusionProcessing, original_function):
     res = original_function(p)
     shared.opts.return_grid = old_state
 
-    # add result to history
-    global_state.add_config( uuid.uuid4().hex, res.prompt, shared.opts.sd_model_checkpoint, res.infotexts[0], res.images[0])
+    # only save automatically when automatic save is enabled;
+    # otherwise the entry waits for the manual "Save Last Generated Info" click
+    if global_state.automatic_save:
+        try:
+            global_state.add_config(uuid.uuid4().hex, res.prompt, shared.opts.sd_model_checkpoint, res.infotexts[0], res.images[0])
+        except Exception:
+            import traceback
+            print("[sd-webui-prompt-history] failed to save generation to history:")
+            traceback.print_exc()
     return res
-

@@ -36,3 +36,42 @@
     padding: 3px;
     border-radius: 4px;
 }
+
+/* Prompt History: le tableau clignotait à chaque seconde.
+   Cause : la poll "every=1s" met le bloc gr.HTML en état "pending"
+   Gradio (opacity .2 + transition + points de chargement + min-height),
+   puis le restaure ~60 ms plus tard. On neutralise cet état ici,
+   scindé à l'onglet, sans toucher le contenu du tableau. */
+#tab_extension_prompt_history_tab .pending {
+    opacity: 1 !important;
+}
+
+#tab_extension_prompt_history_tab .gradio-html > div {
+    transition: none !important;
+}
+
+#tab_extension_prompt_history_tab .dot-flashing {
+    display: none !important;
+}
+
+#tab_extension_prompt_history_tab .gradio-html .min {
+    min-height: 0 !important;
+}
+
+/* tooltip survol du prompt (plein texte) dans le tableau */
+#pmt-tooltip {
+    position: fixed;
+    z-index: 9999;
+    max-width: 480px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #fff;
+    background: rgba(17, 17, 17, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
