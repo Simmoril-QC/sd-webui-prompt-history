@@ -8,6 +8,8 @@ automatic_save: bool = True
 save_thumbnail: str = "full"
 items_per_page: int = 15
 table_thumb_size: int = 136
+save_params: bool = False
+hover_tooltip: bool = True
 
 # data
 history_path: str = ""

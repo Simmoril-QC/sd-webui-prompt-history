@@ -42,7 +42,9 @@ def read_config():
             import json
             data = json.load(f)
             for hr in data:
-                h = history.History(hr["id"], hr.get("name"), hr.get("model"), hr.get("prompt", hr.get("info_text", "")))
+                h = history.History(hr["id"], hr.get("name"), hr.get("model"),
+                                    prompt=hr.get("prompt", hr.get("info_text", "")),
+                                    params=hr.get("params", ""))
                 h.created_at = hr.get("created_at", time.time())
                 global_state.config_histories.append(h)
 
@@ -61,9 +63,11 @@ def save_history():
         outfile.write(to_json())
 
 def add_config(id: str, name: str, model: str, info_text: str, img):
-    # init new history - only the prompt is stored, generation parameters are dropped
-    prompt = (info_text or "").splitlines(True)[0].rstrip("\n").strip()
-    h = history.History(id, name, model, prompt)
+    # init new history - the prompt is always stored; the full generation info
+    # (parameters) is only kept when the "Also save generation parameters" option is on
+    full_info = (info_text or "").rstrip("\n")
+    h = history.History(id, name, model, prompt=full_info,
+                        params=full_info if global_state.save_params else "")
 
     # in case of not automatic save, we must store few items in case of manual saved
     if not global_state.automatic_save:
@@ -121,6 +125,8 @@ def export_txt():
     for h in global_state.config_histories:
         lines.append(f"--- {time.ctime(h.created_at)} ---")
         lines.append(h.prompt)
+        if h.params:
+            lines.append(h.params)
         lines.append("")
     if not lines:
         return gr.Error("No prompts to export.")
@@ -137,6 +143,8 @@ def before_ui():
     global_state.save_thumbnail = shared.opts.data.get('prompt_history_save_thumbnail', "full")
     global_state.table_thumb_size = int(shared.opts.data.get('prompt_history_preview_thumb_size_inline', 96))
     global_state.items_per_page = int(shared.opts.data.get('prompt_history_items_per_page', 15))
+    global_state.save_params = shared.opts.data.get('prompt_history_save_params', False)
+    global_state.hover_tooltip = shared.opts.data.get('prompt_history_hover_tooltip', True)
     setup_data_dir = shared.opts.data.get('prompt_history_data_path', config_dir)
     if setup_data_dir != "":
         config_dir = setup_data_dir
@@ -192,11 +200,11 @@ def on_ui_tabs():
                     )
                 with gr.Row():
                     code_block = gr.Code(
-                        label="Full Info (for Apply)",
-                        show_label=True,
-                        interactive=False,
-                        visible=False,
-                    )
+                            label="Parameters (Apply source)",
+                            show_label=True,
+                            interactive=False,
+                            visible=False,
+                        )
         # manual save last generated info
         save_last_prompt_btn.click(
             fn=manually_save,
@@ -283,8 +291,13 @@ def on_ui_tabs():
             global active_id, current_code
             for h in global_state.config_histories:
                 if h.id == active_id:
-                    h.prompt = current_code
-                    h.name = current_code[:64]
+                    if h.params or global_state.save_params:
+                        # parameters mode: edited text is the full generation info
+                        h.params = current_code
+                        h.prompt = current_code.splitlines(True)[0].rstrip("\n").strip()
+                    else:
+                        h.prompt = current_code
+                    h.name = h.prompt[:64]
                     save_history()
                     break
             # update state
@@ -308,7 +321,7 @@ def on_ui_tabs():
         click_item_btn.click(
             fn=on_click_item,
             inputs=[item_id_text],
-            outputs=[preview_image, prompt_code, code_block, edit_btn],
+            outputs=[preview_image, prompt_code, code_block, code_block, edit_btn],
             show_progress=False,
         )
 
@@ -337,12 +350,15 @@ def on_click_item(id: str):
     for h in global_state.config_histories:
         if h.id == id:
             active_id = h.id
-            current_code = h.prompt
-            origin_code = h.prompt
+            # the "apply source" field: full generation info when parameters are
+            # stored, the prompt otherwise
+            apply_source = h.params if h.params else h.prompt
+            current_code = apply_source
+            origin_code = apply_source
             img_path = os.path.join(config_dir, f"{h.id}.jpg")
             global_state.config_changed = True
             img = Image.open(img_path) if os.path.isfile(img_path) else None
-            return img, h.prompt, h.prompt, gr.update(visible=True)
+            return img, h.prompt, apply_source, gr.update(visible=bool(h.params) or global_state.save_params), gr.update(visible=True)
 
 def config_changed(orginal_cfg:None, new_cfg:None):
     if orginal_cfg != new_cfg:
@@ -357,6 +373,8 @@ def history_table():
     global_state.save_thumbnail = config_changed(global_state.save_thumbnail, shared.opts.data.get('prompt_history_save_thumbnail', "full"))
     global_state.table_thumb_size = config_changed(global_state.table_thumb_size, int(shared.opts.data.get('prompt_history_preview_thumb_size_inline', 96)))
     global_state.items_per_page = config_changed(global_state.items_per_page, int(shared.opts.data.get('prompt_history_items_per_page', 15)))
+    global_state.save_params = config_changed(global_state.save_params, shared.opts.data.get('prompt_history_save_params', False))
+    global_state.hover_tooltip = config_changed(global_state.hover_tooltip, shared.opts.data.get('prompt_history_hover_tooltip', True))
     setup_data_dir = config_changed(config_dir, shared.opts.data.get('prompt_history_data_path', config_dir))
     if setup_data_dir != "" and setup_data_dir != config_dir:
         global_state.config_histories = list()
@@ -404,15 +422,20 @@ def history_table():
             item_class = ""
             if h.id == active_id:
                 item_class = active_class
-            # hover tooltip: full prompt on the truncated name cell
-            title_attr = '"' + html.escape(h.prompt, quote=True).replace("\n", " ") + '"'
+            # hover tooltip (custom JS + native title) only when the option is enabled
+            if global_state.hover_tooltip:
+                tooltip_class = " pmt-prompt-cell"
+                title_attr = ' title="' + html.escape(h.prompt, quote=True).replace("\n", " ") + '"'
+            else:
+                tooltip_class = ""
+                title_attr = ""
             on_click_view_item_fn =  '"' + html.escape(f"""return promptHistoryItemClick('{h.id}')""") + '"'
             on_click_delete_item_fn =  '"' + html.escape(f"""return promptHistoryItemDelete('{h.id}')""") + '"'
             code += f"""<tr class="{item_class}">
                         <td style="cursor: pointer;vertical-align:top;" onclick="return promptHistorySelect(this)">
                             <input type="checkbox" value="{h.id}" style="pointer-events: none;cursor:pointer;outline:1px solid #dadada;" />
                         </td>
-                        <td class="pmt-prompt-cell" style="cursor: pointer;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;max-width: 420px;" title={title_attr} onclick={on_click_view_item_fn}>{html.escape(h.prompt)}</td>
+                        <td class="{tooltip_class.strip()}" style="cursor: pointer;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;max-width: 420px;"{title_attr} onclick={on_click_view_item_fn}>{html.escape(h.prompt)}</td>
                         <td style="cursor: pointer;vertical-align:top;" onclick={on_click_view_item_fn}>
                             <img src="/file={config_dir}{os.sep}{h.id}.jpg" style="max-width:{global_state.table_thumb_size}px;max-height:{global_state.table_thumb_size}px;">
                         </td>
@@ -458,6 +481,8 @@ def on_ui_settings():
     shared.opts.add_option("prompt_history_preview_thumb_size_inline", shared.OptionInfo(96, "Preview thumbnail size in table", gr.Number, section=section))
     shared.opts.add_option("prompt_history_items_per_page", shared.OptionInfo(15, "Number of history items display per page", gr.Number, section=section))
     shared.opts.add_option('prompt_history_automatic_save_info', shared.OptionInfo(True, 'Automatic Save (If unset, prompts are saved only when you click "Save Last Generated Info")', section=section))
+    shared.opts.add_option('prompt_history_save_params', shared.OptionInfo(False, 'Also save generation parameters (steps, sampler, seed... - prompt is always saved, parameters are optional)', section=section))
+    shared.opts.add_option('prompt_history_hover_tooltip', shared.OptionInfo(True, 'Show full prompt on hover in the table', section=section))
     shared.opts.add_option('prompt_history_save_thumbnail', shared.OptionInfo(None, "Save Thumbnail", gr.Dropdown, lambda: {"choices": ["none", "thumbnail", "full"]}, section=section))
 
 

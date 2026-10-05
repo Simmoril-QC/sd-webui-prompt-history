@@ -11,9 +11,9 @@ The original extension stores the full generation info (prompt + sampler, steps,
 This fork:
 
 1. **Saves prompts only on demand** — nothing is recorded automatically. A prompt is saved only when you click **"Save Last Generated Info"** (button in the *Prompt History* tab, or the matching button injected in the txt2img tab). You stay in full control of what ends up in your history.
-2. **Stores the prompt only** — generation parameters (steps, sampler, seed, CFG, ...) are dropped. One clean line per entry.
-3. **Hover tooltips** — hover the prompt column in the table to read the full prompt in a tooltip (long prompts are no longer truncated).
-4. **Export to `.txt`** — one click on **"📄 Export prompts (.txt)"** downloads all saved prompts as a plain-text file (one block per prompt, with its date).
+2. **Stores the prompt only** — generation parameters (steps, sampler, seed, CFG, ...) are dropped by default. One clean line per entry. If you want to keep the parameters too (useful for reproducing a generation), enable the optional **"Also save generation parameters"** setting.
+3. **Hover tooltips** — hover the prompt column in the table to read the full prompt in a tooltip (long prompts are no longer truncated). Can be disabled with the **"Show full prompt on hover in the table"** setting.
+4. **Export to `.txt`** — one click on **"📄 Export prompts (.txt)"** downloads all saved prompts as a plain-text file (one block per prompt, with its date and its parameters when stored).
 
 ![Prompt History tab](screenshots/tab-overview.png)
 
@@ -77,6 +77,8 @@ Settings live in *Settings → Prompt History*:
 | **Preview thumbnail size in table** | Size (px) of the thumbnails in the table. |
 | **Number of history items display per page** | Pagination size. |
 | **Automatic Save** | If *checked*, every generation is saved automatically (original behavior). If *unchecked* (recommended for this fork), prompts are saved only when you click **"Save Last Generated Info"**. |
+| **Also save generation parameters** | If *checked*, the full generation info (prompt + steps, sampler, seed, CFG, ...) is stored alongside the prompt. The prompt is always saved; the parameters are optional. Entries saved with parameters include them in the export, and the preview panel shows the full info for **Apply** (paste back into txt2img with all settings). |
+| **Show full prompt on hover in the table** | If *checked*, hovering a prompt in the table shows the full text in a tooltip. Uncheck to disable the hover tooltip. |
 | **Save Thumbnail** | `full` (default), `thumbnail` (resized to 300px) or `none`. |
 
 ## Data format
@@ -90,12 +92,13 @@ The journal is a plain JSON file (`data.json` in the data folder):
     "name": "a red fox in the snow, cinematic",
     "model": "sd_xl_base_1.0.safetensors",
     "prompt": "a red fox in the snow, cinematic",
+    "params": "a red fox in the snow, cinematic\nSteps: 28\nSampler: DPM++ 2M\nSeed: 123456\n...",
     "created_at": 1762243200.0
   }
 ]
 ```
 
-Entries saved by the original extension (with `info_text` containing the full parameters) are automatically read and reduced to their prompt only, so you can keep an existing history.
+`params` is empty unless the **"Also save generation parameters"** option is enabled. Entries saved by the original extension (with `info_text` containing the full parameters) are automatically read and reduced to their prompt only, so you can keep an existing history.
 
 ## Credits
 
