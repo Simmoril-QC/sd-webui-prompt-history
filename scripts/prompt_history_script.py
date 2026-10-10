@@ -26,11 +26,6 @@ manual_save_history = None
 total_pages = 1
 current_page = 1
 
-try:
-    from gradio.components.download_button import DownloadButton
-except ImportError:  # older Gradio
-    DownloadButton = None
-
 
 def read_config():
     # ensure history exist
@@ -121,6 +116,15 @@ def manually_save():
         manual_save_history = None
 
 def export_txt():
+    # Build the export content. Returns a file path; the gr.File output
+    # component (wired in on_ui_tabs) postprocesses it into a downloadable
+    # FileData. Must NOT return a gr.File instance or a DownloadButton value:
+    # the old code passed a label string to DownloadButton(value=...), so the
+    # browser fetched "/file=<label>" (a 403) and opened a blank tab, and the
+    # gr.File(path, file_name=...) return would have raised because Gradio's
+    # File component has no file_name argument.
+    if not global_state.config_histories:
+        raise gr.Error("No prompts to export.")
     lines = []
     for h in global_state.config_histories:
         lines.append(f"--- {time.ctime(h.created_at)} ---")
@@ -128,13 +132,15 @@ def export_txt():
         if h.params:
             lines.append(h.params)
         lines.append("")
-    if not lines:
-        return gr.Error("No prompts to export.")
     content = "\n".join(lines).strip() + "\n"
     path = os.path.join(config_dir, "prompts_export.txt")
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
-    return gr.File(path, file_name="prompts_export.txt")
+    # gr.update: fill the gr.File output with the file AND reveal it. A plain
+    # path would populate the value but the component starts hidden. Verified
+    # in Gradio 4.40 that this yields a FileData (orig_name=prompts_export.txt)
+    # with a served /file= url, which the browser turns into a real download.
+    return gr.update(value=path, visible=True)
 
 def before_ui():
     global config_dir
@@ -158,10 +164,21 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False) as ui:
         with gr.Row():
             save_last_prompt_btn = gr.Button("Save Last Generated Info", elem_id="prompt_history_save_btn", visible=not global_state.automatic_save)
-            if DownloadButton is not None:
-                export_btn = DownloadButton(value="📄 Export prompts (.txt)", elem_id="prompt_history_export_btn")
-            else:
-                export_btn = gr.Button("📄 Export prompts (.txt)", elem_id="prompt_history_export_btn")
+            # A plain trigger button: it must NOT be a DownloadButton with a
+            # string value, because Gradio treats that string as a file path and
+            # the browser ends up fetching "/file=<label>" (a 403 / blank tab).
+            # The actual file is produced by export_txt() and shown in the
+            # gr.File output below, which Gradio serves as a real download.
+            export_btn = gr.Button("📄 Export prompts (.txt)", elem_id="prompt_history_export_btn")
+        with gr.Row():
+            # Output of the export: hidden until the user clicks Export, then it
+            # fills with the generated .txt and the browser gets a download link.
+            export_file = gr.File(
+                label="Exported prompts (.txt)",
+                visible=False,
+                interactive=False,
+                elem_id="prompt_history_export_file",
+            )
         with gr.Row():
             with gr.Column(scale=7):
                 # list display column
@@ -212,7 +229,7 @@ def on_ui_tabs():
         # export all prompts to a .txt file
         export_btn.click(
             fn=export_txt,
-            outputs=export_btn,
+            outputs=[export_file],
         )
 
         # process when click edit button

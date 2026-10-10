@@ -21,13 +21,16 @@ def process_images(p: processing.StableDiffusionProcessing, original_function):
     res = original_function(p)
     shared.opts.return_grid = old_state
 
-    # only save automatically when automatic save is enabled;
-    # otherwise the entry waits for the manual "Save Last Generated Info" click
-    if global_state.automatic_save:
-        try:
-            global_state.add_config(uuid.uuid4().hex, res.prompt, shared.opts.sd_model_checkpoint, res.infotexts[0], res.images[0])
-        except Exception:
-            import traceback
-            print("[sd-webui-prompt-history] failed to save generation to history:")
-            traceback.print_exc()
+    # Always record the just-finished generation. add_config() decides
+    # internally whether to persist it right away (automatic save on) or to
+    # just buffer it in manual_save_history so the "Save Last Generated Info"
+    # button can store it on demand (manual mode). Guarding this call with
+    # `if automatic_save` meant manual mode never buffered anything, so the
+    # Save button had nothing to save.
+    try:
+        global_state.add_config(uuid.uuid4().hex, res.prompt, shared.opts.sd_model_checkpoint, res.infotexts[0], res.images[0])
+    except Exception:
+        import traceback
+        print("[sd-webui-prompt-history] failed to save generation to history:")
+        traceback.print_exc()
     return res
