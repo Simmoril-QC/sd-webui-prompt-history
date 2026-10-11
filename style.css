@@ -58,6 +58,40 @@
     min-height: 0 !important;
 }
 
+/* witness inline "✓ Saved HH:MM:SS (N total)", sits right of the Save button */
+#prompt_history_save_status {
+    align-self: center;
+    margin-left: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--color-success, #2e9e5b);
+}
+
+/* floating toast, visible from any tab (txt2img included) */
+#pmt-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    z-index: 10000;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    background: rgba(20, 20, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#pmt-toast.pmt-toast-show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
 /* tooltip survol du prompt (plein texte) dans le tableau */
 #pmt-tooltip {
     position: fixed;

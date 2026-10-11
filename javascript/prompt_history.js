@@ -191,7 +191,45 @@ function promptHistoryTooltip() {
     });
 }
 
+// ---- floating "saved" toast: shown from ANY tab (you usually stay on txt2img) ----
+let pmtToast = null;
+let pmtToastTimer = null;
+function promptHistoryShowToast(text) {
+    if (!pmtToast) {
+        pmtToast = document.createElement("div");
+        pmtToast.id = "pmt-toast";
+        document.body.appendChild(pmtToast);
+    }
+    pmtToast.textContent = text;
+    pmtToast.classList.add("pmt-toast-show");
+    if (pmtToastTimer) clearTimeout(pmtToastTimer);
+    pmtToastTimer = setTimeout(() => {
+        pmtToast.classList.remove("pmt-toast-show");
+        pmtToastTimer = null;
+    }, 5000);
+}
+function promptHistorySavedWitness() {
+    // The "Save Last Generated Info" button's handler writes a confirmation
+    // into this element (a gr.HTML that changes only on a successful save);
+    // fire the toast on every NEW text (the server makes each one unique).
+    const el = gradioApp().querySelector("#prompt_history_save_status");
+    if (el && el.__witnessBound) return;
+    if (el) {
+        el.__witnessBound = true;
+        let lastText = (el.textContent || "").trim();
+        const mo = new MutationObserver(() => {
+            const text = (el.textContent || "").trim();
+            if (text && text !== lastText) {
+                lastText = text;
+                window.promptHistoryShowToast(text);
+            }
+        });
+        mo.observe(el, { childList: true, characterData: true, subtree: true });
+    }
+}
+
 onUiLoaded(async() => {
     promptHistoryAutoRefresh()
     promptHistoryTooltip()
+    promptHistorySavedWitness()
 });

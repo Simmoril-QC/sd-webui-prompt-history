@@ -26,6 +26,11 @@ manual_save_history = None
 total_pages = 1
 current_page = 1
 
+# transient witness that the last entry was really stored (manual save).
+# Set by manually_save() and returned straight to the "Save" button's output
+# (gr.HTML) — the browser watches that element and fires a floating toast.
+save_confirmation = ""
+
 
 def read_config():
     # ensure history exist
@@ -96,7 +101,9 @@ def _save_image(img, id: str):
     images.save_image(image=img, path=global_state.history_path, basename="", forced_filename=f"{id}", extension="jpg", save_to_dirs=False)
 
 def manually_save():
-    global manual_save_history
+    global manual_save_history, save_confirmation
+    # reset so a failed/absent save clears the witness (element shows nothing)
+    save_confirmation = ""
     if manual_save_history is not None:
         img = manual_save_history["image"]
         h = manual_save_history["history"]
@@ -112,8 +119,17 @@ def manually_save():
         # reload the UI
         global_state.config_changed = True
 
+        # visual witness that the entry was really stored: returned to the
+        # "Save" button's output (a gr.HTML that only changes here). The total
+        # count is included so the string is unique per save (the browser only
+        # fires the toast on a text change) and it doubles as "how many now".
+        save_confirmation = "✓ Saved " + time.strftime("%H:%M:%S") + \
+                            " (" + str(len(global_state.config_histories)) + " total)"
+
         # clean
         manual_save_history = None
+    # absent/failed save: "" is returned -> nothing shown
+    return save_confirmation
 
 def export_txt():
     # Build the export content. Returns a file path; the gr.File output
@@ -164,6 +180,11 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False) as ui:
         with gr.Row():
             save_last_prompt_btn = gr.Button("Save Last Generated Info", elem_id="prompt_history_save_btn", visible=not global_state.automatic_save)
+            # witness that an entry was really stored ("✓ Saved HH:MM:SS (N total)");
+            # sits right next to the Save button. Filled only by that button's
+            # handler; a floating toast (see javascript/) mirrors it so the
+            # confirmation is visible even from the txt2img tab.
+            save_status = gr.HTML("", elem_id="prompt_history_save_status")
             # A plain trigger button: it must NOT be a DownloadButton with a
             # string value, because Gradio treats that string as a file path and
             # the browser ends up fetching "/file=<label>" (a 403 / blank tab).
@@ -222,9 +243,11 @@ def on_ui_tabs():
                             interactive=False,
                             visible=False,
                         )
-        # manual save last generated info
+        # manual save last generated info (the return value fills the witness
+        # element; an absent buffer returns "" so nothing is shown)
         save_last_prompt_btn.click(
             fn=manually_save,
+            outputs=[save_status],
         )
         # export all prompts to a .txt file
         export_btn.click(
